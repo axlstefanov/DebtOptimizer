@@ -1,0 +1,6 @@
+@DebtOptimizer_HostAddress = http://localhost:5154
+
+GET {{DebtOptimizer_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
