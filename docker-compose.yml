@@ -3,11 +3,21 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "Your_Strong_Pass123"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
     ports:
       - "1433:1433"
     volumes:
       - mssql-data:/var/opt/mssql
+
+  api:
+    build: .
+    ports:
+      - "5154:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Server=db;Database=DebtDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;"
+    depends_on:
+      - db
 
 volumes:
   mssql-data:
