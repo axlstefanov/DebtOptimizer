@@ -1,13 +1,13 @@
-﻿namespace DebtOptimizer.Models
+﻿namespace DebtOptimizer.Dtos
 {
-    public class Debt
+    public class DebtPayment
     {
-        public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public decimal Balance { get; set; }
         public decimal AnnualInterestRatePercent { get; set; }
         public decimal MinimumPayment { get; set; }
-        public int FinancialProfileId { get; set; }
-        public FinancialProfile? Profile { get; set; }
+        public decimal PaymentAmount { get; set; }
+        public decimal InterestThisMonth { get; set; }
+        public bool IsPriority { get; set; }
     }
 }
