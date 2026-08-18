@@ -3,3 +3,6 @@ obj/
 .git/
 .vs/
 *.user
+**/bin/
+**/obj/
+tests/
