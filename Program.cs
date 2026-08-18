@@ -11,6 +11,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         sql => sql.EnableRetryOnFailure()));
 builder.Services.AddScoped<PaymentPlanService>();
 builder.Services.AddScoped<ProfileService>();
+builder.Services.AddHttpClient<IDebtExtractor, GeminiDebtExtractor>(c =>
+    c.Timeout = TimeSpan.FromSeconds(30));
 
 var app = builder.Build();
 
