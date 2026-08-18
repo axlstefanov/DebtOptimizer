@@ -1,10 +1,12 @@
+using System.Text.Json.Serialization;
 using DebtOptimizer.Data;
 using DebtOptimizer.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("Default"),
@@ -12,6 +14,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<PaymentPlanService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddHttpClient<IDebtExtractor, GeminiDebtExtractor>(c =>
+    c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<IStrategyClassifier, GeminiStrategyClassifier>(c =>
     c.Timeout = TimeSpan.FromSeconds(30));
 
 var app = builder.Build();

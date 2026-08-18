@@ -14,6 +14,8 @@ namespace DebtOptimizer.Services
                 Name = request.Name,
                 Income = request.Income,
                 Expenses = request.Expenses,
+                PayoffStrategy = request.PayoffStrategy,
+                TargetDebtName = request.TargetDebtName,
                 Debts = request.Debts.Select(d => new Debt
                 {
                     Name = d.Name,
@@ -41,6 +43,8 @@ namespace DebtOptimizer.Services
                 Name = profile.Name,
                 Income = profile.Income,
                 Expenses = profile.Expenses,
+                PayoffStrategy = profile.PayoffStrategy,
+                TargetDebtName = profile.TargetDebtName,
                 Debts = profile.Debts.Select(ToDebtInput).ToList()
             };
         }
@@ -55,6 +59,8 @@ namespace DebtOptimizer.Services
                 Name = profile.Name,
                 Income = profile.Income,
                 Expenses = profile.Expenses,
+                PayoffStrategy = profile.PayoffStrategy,
+                TargetDebtName = profile.TargetDebtName,
                 Debts = profile.Debts.Select(ToDebtInput).ToList()
             };
         }

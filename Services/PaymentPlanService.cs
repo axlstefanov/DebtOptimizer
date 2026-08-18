@@ -1,4 +1,5 @@
 ﻿using DebtOptimizer.Dtos;
+using DebtOptimizer.Models;
 
 namespace DebtOptimizer.Services
 {
@@ -43,20 +44,23 @@ namespace DebtOptimizer.Services
                         MinimumPayment = debt.MinimumPayment,
                         PaymentAmount = covered ? debt.MinimumPayment : 0,
                         InterestThisMonth = MonthlyInterest(debt.Balance, debt.AnnualInterestRatePercent),
-                        IsHighestRate = false
+                        ReceivesSurplus = false
                     });
                 }
 
                 return response;
             }
 
-            var deadlinePlan = Project(ranked, moneyAfterExpenses, today, respectDeadlines: true);
-            var cheapestPlan = Project(ranked, moneyAfterExpenses, today, respectDeadlines: false);
+            var strategy = request.PayoffStrategy;
+            var targetName = strategy == PayoffStrategy.Target ? request.TargetDebtName : null;
+
+            var deadlinePlan = Project(ranked, moneyAfterExpenses, today, true, strategy, targetName);
+            var cheapestPlan = Project(ranked, moneyAfterExpenses, today, false, strategy, targetName);
 
             response.ExtraInterestFromDeadlines =
                 Math.Round(deadlinePlan.TotalInterest - cheapestPlan.TotalInterest, 2);
 
-            var surplusTarget = AvalancheOrder(deadlinePlan.Debts).FirstOrDefault();
+            var surplusTarget = SurplusOrder(deadlinePlan.Debts, strategy, targetName, true).FirstOrDefault();
 
             foreach (var projected in deadlinePlan.Debts)
             {
@@ -73,7 +77,7 @@ namespace DebtOptimizer.Services
                     MinimumPayment = debt.MinimumPayment,
                     PaymentAmount = Math.Round(projected.FirstPayment, 2),
                     InterestThisMonth = MonthlyInterest(debt.Balance, debt.AnnualInterestRatePercent),
-                    IsHighestRate = projected == surplusTarget,
+                    ReceivesSurplus = projected == surplusTarget,
                     DeadlineMet = debt.PayoffDeadline.HasValue
                         ? payoffDate.HasValue && payoffDate.Value <= debt.PayoffDeadline.Value
                         : null,
@@ -85,7 +89,8 @@ namespace DebtOptimizer.Services
         }
 
         private static PlanProjection Project(
-            List<DebtInput> ranked, decimal monthlyBudget, DateOnly today, bool respectDeadlines)
+            List<DebtInput> ranked, decimal monthlyBudget, DateOnly today, bool respectDeadlines,
+            PayoffStrategy strategy, string? targetName)
         {
             var plan = new PlanProjection
             {
@@ -97,7 +102,8 @@ namespace DebtOptimizer.Services
                 var active = plan.Debts.Where(d => d.Balance > 0m).ToList();
                 if (active.Count == 0) break;
 
-                var payments = Allocate(active, monthlyBudget, today.AddMonths(month - 1), respectDeadlines);
+                var payments = Allocate(
+                    active, monthlyBudget, today.AddMonths(month - 1), respectDeadlines, strategy, targetName);
                 var stalled = true;
 
                 foreach (var debt in active)
@@ -126,7 +132,8 @@ namespace DebtOptimizer.Services
         }
 
         private static Dictionary<DebtProjection, decimal> Allocate(
-            List<DebtProjection> active, decimal monthlyBudget, DateOnly paymentDate, bool respectDeadlines)
+            List<DebtProjection> active, decimal monthlyBudget, DateOnly paymentDate, bool respectDeadlines,
+            PayoffStrategy strategy, string? targetName)
         {
             var payments = active.ToDictionary(d => d, _ => 0m);
             var owed = active.ToDictionary(
@@ -161,11 +168,7 @@ namespace DebtOptimizer.Services
                 }
             }
 
-            var surplusOrder = respectDeadlines
-                ? AvalancheOrder(active)
-                : active.OrderByDescending(d => d.Debt.AnnualInterestRatePercent);
-
-            foreach (var debt in surplusOrder)
+            foreach (var debt in SurplusOrder(active, strategy, targetName, respectDeadlines))
             {
                 if (remaining <= 0m) break;
 
@@ -179,10 +182,20 @@ namespace DebtOptimizer.Services
             return payments;
         }
 
-        private static IOrderedEnumerable<DebtProjection> AvalancheOrder(IEnumerable<DebtProjection> debts)
-            => debts
-                .OrderBy(d => d.Debt.PayoffDeadline.HasValue)
-                .ThenByDescending(d => d.Debt.AnnualInterestRatePercent);
+        private static IOrderedEnumerable<DebtProjection> SurplusOrder(
+            IEnumerable<DebtProjection> debts, PayoffStrategy strategy, string? targetName, bool respectDeadlines)
+        {
+            var ordered = debts.OrderByDescending(d => IsTarget(d.Debt, targetName));
+            if (respectDeadlines) ordered = ordered.ThenBy(d => d.Debt.PayoffDeadline.HasValue);
+
+            return strategy == PayoffStrategy.Snowball
+                ? ordered.ThenBy(d => d.Debt.Balance)
+                : ordered.ThenByDescending(d => d.Debt.AnnualInterestRatePercent);
+        }
+
+        private static bool IsTarget(DebtInput debt, string? targetName)
+            => !string.IsNullOrWhiteSpace(targetName)
+                && string.Equals(debt.Name, targetName, StringComparison.OrdinalIgnoreCase);
 
         private static int MonthsAvailableUntil(DateOnly paymentDate, DateOnly deadline)
         {

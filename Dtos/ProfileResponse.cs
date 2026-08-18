@@ -1,3 +1,5 @@
+using DebtOptimizer.Models;
+
 namespace DebtOptimizer.Dtos
 {
     public class ProfileResponse
@@ -6,6 +8,8 @@ namespace DebtOptimizer.Dtos
         public string Name { get; set; } = string.Empty;
         public decimal Income { get; set; }
         public decimal Expenses { get; set; }
+        public PayoffStrategy PayoffStrategy { get; set; }
+        public string? TargetDebtName { get; set; }
         public List<DebtInput> Debts { get; set; } = [];
     }
 }

@@ -1,4 +1,5 @@
 using DebtOptimizer.Dtos;
+using DebtOptimizer.Models;
 using DebtOptimizer.Services;
 
 namespace DebtOptimizer.Tests
@@ -29,11 +30,11 @@ namespace DebtOptimizer.Tests
 
             var card = result.Payments.Single(p => p.Name == "Credit card");
             Assert.Equal(200m, card.PaymentAmount);
-            Assert.True(card.IsHighestRate);
+            Assert.True(card.ReceivesSurplus);
 
             var loan = result.Payments.Single(p => p.Name == "Car loan");
             Assert.Equal(200m, loan.PaymentAmount);
-            Assert.False(loan.IsHighestRate);
+            Assert.False(loan.ReceivesSurplus);
         }
 
         [Fact]
@@ -147,11 +148,11 @@ namespace DebtOptimizer.Tests
             Assert.NotNull(store.ProjectedPayoffDate);
             Assert.True(store.ProjectedPayoffDate <= deadline);
             Assert.InRange(store.PaymentAmount, 185m, 186m);
-            Assert.False(store.IsHighestRate);
+            Assert.False(store.ReceivesSurplus);
 
             var card = result.Payments.Single(p => p.Name == "Credit card");
             Assert.Null(card.DeadlineMet);
-            Assert.True(card.IsHighestRate);
+            Assert.True(card.ReceivesSurplus);
             Assert.InRange(card.PaymentAmount, 414m, 415m);
         }
 
@@ -238,7 +239,7 @@ namespace DebtOptimizer.Tests
 
             Assert.True(loan.DeadlineMet);
             Assert.InRange(loan.PaymentAmount, 629m, 630m);
-            Assert.True(card.IsHighestRate);
+            Assert.True(card.ReceivesSurplus);
             Assert.InRange(card.PaymentAmount, 370m, 371m);
             Assert.True(result.ExtraInterestFromDeadlines > 0m);
         }
@@ -270,5 +271,171 @@ namespace DebtOptimizer.Tests
             Assert.Equal(400m, store.PaymentAmount);
             Assert.Equal(new DateOnly(2027, 1, 18), store.ProjectedPayoffDate);
         }
+
+        [Fact]
+        public void CreatePlan_NoStrategyGiven_MatchesAnExplicitAvalanchePlan()
+        {
+            var service = new PaymentPlanService();
+            var unset = new CreateProfileRequest
+            {
+                Name = "Aksel",
+                Income = 3000m,
+                Expenses = 2400m,
+                Debts =
+                [
+                    new DebtInput { Name = "Credit card", Balance = 5000m, AnnualInterestRatePercent = 30m, MinimumPayment = 100m },
+                    new DebtInput { Name = "Car loan", Balance = 8000m, AnnualInterestRatePercent = 8m, MinimumPayment = 150m },
+                    new DebtInput { Name = "Store card", Balance = 600m, AnnualInterestRatePercent = 15m, MinimumPayment = 40m }
+                ]
+            };
+
+            Assert.Equal(PayoffStrategy.Avalanche, unset.PayoffStrategy);
+
+            var defaulted = service.CreatePlan(unset);
+            var avalanche = service.CreatePlan(StrategyRequest(PayoffStrategy.Avalanche));
+
+            Assert.Equal(
+                avalanche.Payments.Select(p => (p.Name, p.PaymentAmount, p.ReceivesSurplus)),
+                defaulted.Payments.Select(p => (p.Name, p.PaymentAmount, p.ReceivesSurplus)));
+
+            var card = defaulted.Payments.Single(p => p.Name == "Credit card");
+            Assert.Equal(410m, card.PaymentAmount);
+            Assert.True(card.ReceivesSurplus);
+        }
+
+        [Fact]
+        public void CreatePlan_Snowball_PutsExtraOnSmallestBalanceNotHighestRate()
+        {
+            var service = new PaymentPlanService();
+            var request = new CreateProfileRequest
+            {
+                Name = "Aksel",
+                Income = 2000m,
+                Expenses = 1600m,
+                PayoffStrategy = PayoffStrategy.Snowball,
+                Debts =
+                [
+                    new DebtInput { Name = "Credit card", Balance = 3000m, AnnualInterestRatePercent = 20m, MinimumPayment = 90m },
+                    new DebtInput { Name = "Store card", Balance = 800m, AnnualInterestRatePercent = 10m, MinimumPayment = 60m }
+                ]
+            };
+
+            var result = service.CreatePlan(request);
+
+            var store = result.Payments.Single(p => p.Name == "Store card");
+            Assert.Equal(310m, store.PaymentAmount);
+            Assert.True(store.ReceivesSurplus);
+
+            var card = result.Payments.Single(p => p.Name == "Credit card");
+            Assert.Equal(90m, card.PaymentAmount);
+            Assert.False(card.ReceivesSurplus);
+        }
+
+        [Fact]
+        public void CreatePlan_Target_PutsExtraOnTheNamedDebt()
+        {
+            var service = new PaymentPlanService();
+
+            var result = service.CreatePlan(StrategyRequest(PayoffStrategy.Target, "Car loan"));
+
+            var loan = result.Payments.Single(p => p.Name == "Car loan");
+            Assert.Equal(460m, loan.PaymentAmount);
+            Assert.True(loan.ReceivesSurplus);
+
+            Assert.Equal(100m, result.Payments.Single(p => p.Name == "Credit card").PaymentAmount);
+            Assert.Equal(40m, result.Payments.Single(p => p.Name == "Store card").PaymentAmount);
+        }
+
+        [Fact]
+        public void CreatePlan_TargetNamesNoExistingDebt_FallsBackToAvalanche()
+        {
+            var service = new PaymentPlanService();
+
+            var result = service.CreatePlan(StrategyRequest(PayoffStrategy.Target, "Boat loan"));
+
+            var card = result.Payments.Single(p => p.Name == "Credit card");
+            Assert.Equal(410m, card.PaymentAmount);
+            Assert.True(card.ReceivesSurplus);
+
+            Assert.Equal(150m, result.Payments.Single(p => p.Name == "Car loan").PaymentAmount);
+            Assert.Equal(40m, result.Payments.Single(p => p.Name == "Store card").PaymentAmount);
+        }
+
+        [Fact]
+        public void CreatePlan_SnowballWithADeadline_ReservesForTheDeadlineBeforeTheSmallestBalance()
+        {
+            var service = new PaymentPlanService();
+            var today = new DateOnly(2026, 8, 1);
+            var loanDeadline = new DateOnly(2027, 8, 1);
+            var request = new CreateProfileRequest
+            {
+                Name = "Aksel",
+                Income = 3000m,
+                Expenses = 2400m,
+                PayoffStrategy = PayoffStrategy.Snowball,
+                Debts =
+                [
+                    new DebtInput { Name = "Car loan", Balance = 5000m, AnnualInterestRatePercent = 6m, MinimumPayment = 150m, PayoffDeadline = loanDeadline },
+                    new DebtInput { Name = "Credit card", Balance = 6000m, AnnualInterestRatePercent = 28m, MinimumPayment = 120m },
+                    new DebtInput { Name = "Store card", Balance = 800m, AnnualInterestRatePercent = 20m, MinimumPayment = 40m }
+                ]
+            };
+
+            var result = service.CreatePlan(request, today);
+
+            var loan = result.Payments.Single(p => p.Name == "Car loan");
+            Assert.True(loan.DeadlineMet);
+            Assert.InRange(loan.PaymentAmount, 398m, 399m);
+
+            var store = result.Payments.Single(p => p.Name == "Store card");
+            Assert.InRange(store.PaymentAmount, 81m, 82m);
+            Assert.True(store.ReceivesSurplus);
+
+            Assert.Equal(120m, result.Payments.Single(p => p.Name == "Credit card").PaymentAmount);
+        }
+
+        [Theory]
+        [InlineData(PayoffStrategy.Avalanche)]
+        [InlineData(PayoffStrategy.Snowball)]
+        [InlineData(PayoffStrategy.Target)]
+        public void CreatePlan_IncomeBelowTotalMinimums_IsUnaffectedByStrategy(PayoffStrategy strategy)
+        {
+            var service = new PaymentPlanService();
+            var request = new CreateProfileRequest
+            {
+                Name = "Aksel",
+                Income = 2000m,
+                Expenses = 1750m,
+                PayoffStrategy = strategy,
+                TargetDebtName = "Car loan",
+                Debts =
+                [
+                    new DebtInput { Name = "Credit card", Balance = 3000m, AnnualInterestRatePercent = 20m, MinimumPayment = 90m },
+                    new DebtInput { Name = "Car loan", Balance = 10000m, AnnualInterestRatePercent = 5m, MinimumPayment = 200m }
+                ]
+            };
+
+            var result = service.CreatePlan(request);
+
+            Assert.False(result.IsAffordable);
+            Assert.Equal(90m, result.Payments.Single(p => p.Name == "Credit card").PaymentAmount);
+            Assert.Equal(0m, result.Payments.Single(p => p.Name == "Car loan").PaymentAmount);
+        }
+
+        private static CreateProfileRequest StrategyRequest(PayoffStrategy strategy, string? targetDebtName = null)
+            => new()
+            {
+                Name = "Aksel",
+                Income = 3000m,
+                Expenses = 2400m,
+                PayoffStrategy = strategy,
+                TargetDebtName = targetDebtName,
+                Debts =
+                [
+                    new DebtInput { Name = "Credit card", Balance = 5000m, AnnualInterestRatePercent = 30m, MinimumPayment = 100m },
+                    new DebtInput { Name = "Car loan", Balance = 8000m, AnnualInterestRatePercent = 8m, MinimumPayment = 150m },
+                    new DebtInput { Name = "Store card", Balance = 600m, AnnualInterestRatePercent = 15m, MinimumPayment = 40m }
+                ]
+            };
     }
 }
