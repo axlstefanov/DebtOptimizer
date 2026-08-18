@@ -8,6 +8,8 @@
         public decimal MinimumPayment { get; set; }
         public decimal PaymentAmount { get; set; }
         public decimal InterestThisMonth { get; set; }
-        public bool IsPriority { get; set; }
+        public bool IsHighestRate { get; set; }
+        public bool? DeadlineMet { get; set; }
+        public DateOnly? ProjectedPayoffDate { get; set; }
     }
 }

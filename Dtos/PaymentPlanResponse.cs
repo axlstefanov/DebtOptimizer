@@ -7,5 +7,6 @@
         public decimal TotalMinimumPayments { get; set; }
         public bool IsAffordable { get; set; }
         public List<DebtPayment> Payments { get; set; } = [];
+        public decimal ExtraInterestFromDeadlines { get; set; }
     }
 }

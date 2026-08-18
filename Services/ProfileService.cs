@@ -19,7 +19,8 @@ namespace DebtOptimizer.Services
                     Name = d.Name,
                     Balance = d.Balance,
                     AnnualInterestRatePercent = d.AnnualInterestRatePercent,
-                    MinimumPayment = d.MinimumPayment
+                    MinimumPayment = d.MinimumPayment,
+                    PayoffDeadline = d.PayoffDeadline
                 }).ToList()
             };
 
@@ -70,7 +71,8 @@ namespace DebtOptimizer.Services
                 Name = debt.Name,
                 Balance = debt.Balance,
                 AnnualInterestRatePercent = debt.AnnualInterestRatePercent,
-                MinimumPayment = debt.MinimumPayment
+                MinimumPayment = debt.MinimumPayment,
+                PayoffDeadline = debt.PayoffDeadline
             };
     }
 }

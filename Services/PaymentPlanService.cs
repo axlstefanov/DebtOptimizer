@@ -4,7 +4,12 @@ namespace DebtOptimizer.Services
 {
     public class PaymentPlanService
     {
+        private const int MaxProjectionMonths = 1200;
+
         public PaymentPlanResponse CreatePlan(CreateProfileRequest request)
+            => CreatePlan(request, DateOnly.FromDateTime(DateTime.UtcNow));
+
+        public PaymentPlanResponse CreatePlan(CreateProfileRequest request, DateOnly today)
         {
             var moneyAfterExpenses = request.Income - request.Expenses;
             var totalMinimums = request.Debts.Sum(d => d.MinimumPayment);
@@ -38,19 +43,27 @@ namespace DebtOptimizer.Services
                         MinimumPayment = debt.MinimumPayment,
                         PaymentAmount = covered ? debt.MinimumPayment : 0,
                         InterestThisMonth = MonthlyInterest(debt.Balance, debt.AnnualInterestRatePercent),
-                        IsPriority = false
+                        IsHighestRate = false
                     });
                 }
 
                 return response;
             }
 
-            var extra = moneyAfterExpenses - totalMinimums;
+            var deadlinePlan = Project(ranked, moneyAfterExpenses, today, respectDeadlines: true);
+            var cheapestPlan = Project(ranked, moneyAfterExpenses, today, respectDeadlines: false);
 
-            for (var i = 0; i < ranked.Count; i++)
+            response.ExtraInterestFromDeadlines =
+                Math.Round(deadlinePlan.TotalInterest - cheapestPlan.TotalInterest, 2);
+
+            var surplusTarget = AvalancheOrder(deadlinePlan.Debts).FirstOrDefault();
+
+            foreach (var projected in deadlinePlan.Debts)
             {
-                var debt = ranked[i];
-                var isPriority = i == 0;
+                var debt = projected.Debt;
+                var payoffDate = projected.PayoffMonth.HasValue
+                    ? today.AddMonths(projected.PayoffMonth.Value - 1)
+                    : (DateOnly?)null;
 
                 response.Payments.Add(new DebtPayment
                 {
@@ -58,16 +71,172 @@ namespace DebtOptimizer.Services
                     Balance = debt.Balance,
                     AnnualInterestRatePercent = debt.AnnualInterestRatePercent,
                     MinimumPayment = debt.MinimumPayment,
-                    PaymentAmount = isPriority ? debt.MinimumPayment + extra : debt.MinimumPayment,
+                    PaymentAmount = Math.Round(projected.FirstPayment, 2),
                     InterestThisMonth = MonthlyInterest(debt.Balance, debt.AnnualInterestRatePercent),
-                    IsPriority = isPriority
+                    IsHighestRate = projected == surplusTarget,
+                    DeadlineMet = debt.PayoffDeadline.HasValue
+                        ? payoffDate.HasValue && payoffDate.Value <= debt.PayoffDeadline.Value
+                        : null,
+                    ProjectedPayoffDate = payoffDate
                 });
             }
 
             return response;
         }
 
+        private static PlanProjection Project(
+            List<DebtInput> ranked, decimal monthlyBudget, DateOnly today, bool respectDeadlines)
+        {
+            var plan = new PlanProjection
+            {
+                Debts = ranked.Select(d => new DebtProjection { Debt = d, Balance = d.Balance }).ToList()
+            };
+
+            for (var month = 1; month <= MaxProjectionMonths; month++)
+            {
+                var active = plan.Debts.Where(d => d.Balance > 0m).ToList();
+                if (active.Count == 0) break;
+
+                var payments = Allocate(active, monthlyBudget, today.AddMonths(month - 1), respectDeadlines);
+                var stalled = true;
+
+                foreach (var debt in active)
+                {
+                    var rate = debt.Debt.AnnualInterestRatePercent;
+                    var interest = debt.Balance * MonthlyRate(rate);
+
+                    if (MonthsToClearBalanceAt(debt.Balance, rate, payments[debt]).HasValue) stalled = false;
+
+                    plan.TotalInterest += interest;
+                    debt.Balance += interest - payments[debt];
+
+                    if (month == 1) debt.FirstPayment = payments[debt];
+
+                    if (debt.Balance <= 0m)
+                    {
+                        debt.Balance = 0m;
+                        debt.PayoffMonth = month;
+                    }
+                }
+
+                if (stalled) break;
+            }
+
+            return plan;
+        }
+
+        private static Dictionary<DebtProjection, decimal> Allocate(
+            List<DebtProjection> active, decimal monthlyBudget, DateOnly paymentDate, bool respectDeadlines)
+        {
+            var payments = active.ToDictionary(d => d, _ => 0m);
+            var owed = active.ToDictionary(
+                d => d,
+                d => d.Balance * (1m + MonthlyRate(d.Debt.AnnualInterestRatePercent)));
+            var remaining = monthlyBudget;
+
+            foreach (var debt in active)
+            {
+                var payment = Math.Min(Math.Min(debt.Debt.MinimumPayment, owed[debt]), remaining);
+                payments[debt] = payment;
+                remaining -= payment;
+            }
+
+            if (respectDeadlines)
+            {
+                var byDeadline = active
+                    .Where(d => d.Debt.PayoffDeadline.HasValue)
+                    .OrderBy(d => d.Debt.PayoffDeadline!.Value);
+
+                foreach (var debt in byDeadline)
+                {
+                    var months = MonthsAvailableUntil(paymentDate, debt.Debt.PayoffDeadline!.Value);
+                    var required = PaymentToClearBalanceIn(
+                        debt.Balance, debt.Debt.AnnualInterestRatePercent, months);
+
+                    var reservation = Math.Min(Math.Min(required, owed[debt]) - payments[debt], remaining);
+                    if (reservation <= 0m) continue;
+
+                    payments[debt] += reservation;
+                    remaining -= reservation;
+                }
+            }
+
+            var surplusOrder = respectDeadlines
+                ? AvalancheOrder(active)
+                : active.OrderByDescending(d => d.Debt.AnnualInterestRatePercent);
+
+            foreach (var debt in surplusOrder)
+            {
+                if (remaining <= 0m) break;
+
+                var surplus = Math.Min(owed[debt] - payments[debt], remaining);
+                if (surplus <= 0m) continue;
+
+                payments[debt] += surplus;
+                remaining -= surplus;
+            }
+
+            return payments;
+        }
+
+        private static IOrderedEnumerable<DebtProjection> AvalancheOrder(IEnumerable<DebtProjection> debts)
+            => debts
+                .OrderBy(d => d.Debt.PayoffDeadline.HasValue)
+                .ThenByDescending(d => d.Debt.AnnualInterestRatePercent);
+
+        private static int MonthsAvailableUntil(DateOnly paymentDate, DateOnly deadline)
+        {
+            var months = ((deadline.Year - paymentDate.Year) * 12) + deadline.Month - paymentDate.Month;
+            if (paymentDate.AddMonths(months) > deadline) months--;
+
+            return Math.Max(1, months + 1);
+        }
+
+        private static decimal PaymentToClearBalanceIn(decimal balance, decimal annualRatePercent, int months)
+        {
+            var rate = MonthlyRate(annualRatePercent);
+            if (rate == 0m) return balance / months;
+            if (months == 1) return balance * (1m + rate);
+
+            var discounted = (decimal)Math.Pow(1d + (double)rate, -months);
+
+            return balance * rate / (1m - discounted);
+        }
+
+        private static int? MonthsToClearBalanceAt(decimal balance, decimal annualRatePercent, decimal payment)
+        {
+            if (balance <= 0m) return 0;
+            if (payment <= 0m) return null;
+
+            var rate = MonthlyRate(annualRatePercent);
+            if (rate == 0m) return (int)Math.Ceiling(balance / payment);
+
+            var interest = balance * rate;
+            if (payment <= interest) return null;
+
+            var months = -Math.Log(1d - (double)(interest / payment)) / Math.Log(1d + (double)rate);
+
+            return (int)Math.Ceiling(months);
+        }
+
+        private static decimal MonthlyRate(decimal annualRatePercent)
+            => annualRatePercent / 100m / 12m;
+
         private static decimal MonthlyInterest(decimal balance, decimal annualRatePercent)
             => Math.Round(balance * (annualRatePercent / 100m) / 12m, 2);
+
+        private sealed class DebtProjection
+        {
+            public DebtInput Debt { get; init; } = new();
+            public decimal Balance { get; set; }
+            public decimal FirstPayment { get; set; }
+            public int? PayoffMonth { get; set; }
+        }
+
+        private sealed class PlanProjection
+        {
+            public List<DebtProjection> Debts { get; init; } = [];
+            public decimal TotalInterest { get; set; }
+        }
     }
 }
