@@ -1,16 +1,21 @@
-using System.Text.Json.Serialization;
 using DebtOptimizer.Data;
 using DebtOptimizer.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddOpenApi();
 builder.Services.AddControllers()
-    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
+
+var connectionString = ToNpgsqlConnectionString(
+    builder.Configuration.GetConnectionString("Default")
+        ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured."));
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("Default"),
-        sql => sql.EnableRetryOnFailure()));
+    options.UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure()));
+
 builder.Services.AddScoped<PaymentPlanService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddHttpClient<IDebtExtractor, GeminiDebtExtractor>(c =>
@@ -37,3 +42,22 @@ else
 
 app.MapControllers();
 app.Run();
+
+static string ToNpgsqlConnectionString(string raw)
+{
+    if (!raw.StartsWith("postgres://") && !raw.StartsWith("postgresql://"))
+        return raw;
+
+    var uri = new Uri(raw);
+    var userInfo = uri.UserInfo.Split(':', 2);
+
+    return new Npgsql.NpgsqlConnectionStringBuilder
+    {
+        Host = uri.Host,
+        Port = uri.IsDefaultPort ? 5432 : uri.Port,
+        Database = uri.AbsolutePath.TrimStart('/'),
+        Username = Uri.UnescapeDataString(userInfo[0]),
+        Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "",
+        SslMode = Npgsql.SslMode.Require
+    }.ToString();
+}
