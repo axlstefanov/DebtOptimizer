@@ -9,6 +9,5 @@
         public PayoffStrategy PayoffStrategy { get; set; }
         public string? TargetDebtName { get; set; }
         public List<Debt> Debts { get; set; } = [];
-        public decimal AvailableForDebt => Income - Expenses;
     }
 }

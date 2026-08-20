@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -14,11 +16,13 @@ namespace DebtOptimizer.Migrations
                 name: "FinancialProfiles",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Income = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    Expenses = table.Column<decimal>(type: "decimal(18,2)", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Income = table.Column<decimal>(type: "numeric", nullable: false),
+                    Expenses = table.Column<decimal>(type: "numeric", nullable: false),
+                    PayoffStrategy = table.Column<int>(type: "integer", nullable: false),
+                    TargetDebtName = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -29,13 +33,14 @@ namespace DebtOptimizer.Migrations
                 name: "Debts",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Balance = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    AnnualInterestRatePercent = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    MinimumPayment = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    FinancialProfileId = table.Column<int>(type: "int", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Balance = table.Column<decimal>(type: "numeric", nullable: false),
+                    AnnualInterestRatePercent = table.Column<decimal>(type: "numeric", nullable: false),
+                    MinimumPayment = table.Column<decimal>(type: "numeric", nullable: false),
+                    PayoffDeadline = table.Column<DateOnly>(type: "date", nullable: true),
+                    FinancialProfileId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
