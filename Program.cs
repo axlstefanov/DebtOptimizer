@@ -40,7 +40,13 @@ else
     app.UseHttpsRedirection();
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapControllers();
+app.MapFallback("/api/{**rest}", () => Results.NotFound());
+app.MapFallbackToFile("index.html");
+
 app.Run();
 
 static string ToNpgsqlConnectionString(string raw)

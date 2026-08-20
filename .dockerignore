@@ -6,3 +6,5 @@ obj/
 **/bin/
 **/obj/
 tests/
+frontend/node_modules/
+frontend/dist/
