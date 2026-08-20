@@ -110,6 +110,7 @@ export default function App() {
               value={text}
               placeholder={PLACEHOLDER}
               onChange={(event) => setText(event.target.value)}
+              spellCheck={false}
             />
           </div>
 
