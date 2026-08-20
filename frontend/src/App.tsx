@@ -8,7 +8,7 @@ import { ProfileForm } from "./components/ProfileForm";
 
 const PLACEHOLDER = `I take home about 3,200 a month and my living costs are around 1,900.
 
-I owe 4,800 on a Visa card at 22.9% with a 120 minimum, 11,000 on a car loan at 6.4% paying 260 a month, and 2,300 to my brother at no interest — I promised him it would be gone by June 2027.`;
+I owe 4,800 on a Visa card at 22.9% with a 120 minimum, 11,000 on a car loan at 6.4% paying 260 a month, and 2,300 to my brother at no interest. I promised him it would be gone by June 2027.`;
 
 interface PlanResult {
   plan: PaymentPlanResponse;
@@ -131,7 +131,7 @@ export default function App() {
             </button>
             <span className="hint">
               {analysed && textUnchanged
-                ? "Correct the details in the form below — no need to rewrite this."
+                ? "Correct the details in the form below. No need to rewrite this."
                 : "Rough numbers are fine, you can fix them next."}
             </span>
           </div>
@@ -162,7 +162,7 @@ function describeExtractFailure(error: unknown): string {
   if (!(error instanceof ApiError)) return "Something went wrong. Try again.";
 
   if (error.status === 502) {
-    return `The extraction service did not answer usefully. Try again, or describe the numbers more plainly — one debt per sentence. (${error.message})`;
+    return `The extraction service did not answer usefully. Try again, or describe the numbers more plainly. One debt per sentence. (${error.message})`;
   }
 
   return error.message;

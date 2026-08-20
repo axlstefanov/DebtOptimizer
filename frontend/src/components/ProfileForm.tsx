@@ -4,8 +4,8 @@ import { emptyDebtRow, hasProblems } from "../formState";
 import { TextField } from "./TextField";
 
 const STRATEGIES: { value: PayoffStrategy; label: string; blurb: string }[] = [
-  { value: "Avalanche", label: "Avalanche", blurb: "Surplus goes to the highest interest rate — cheapest overall." },
-  { value: "Snowball", label: "Snowball", blurb: "Surplus goes to the smallest balance — quickest wins." },
+  { value: "Avalanche", label: "Avalanche", blurb: "Surplus goes to the highest interest rate. Cheapest overall." },
+  { value: "Snowball", label: "Snowball", blurb: "Surplus goes to the smallest balance. Quickest wins." },
   { value: "Target", label: "Target", blurb: "Surplus goes to one debt you choose, whatever it costs." }
 ];
 

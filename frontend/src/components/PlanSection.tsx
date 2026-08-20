@@ -42,10 +42,8 @@ export function PlanSection({ plan, request }: PlanSectionProps) {
             You are short {formatAmount(shortfall)} against the minimum payments
           </span>
           <span className="notice-body">
-            The minimums total {formatAmount(plan.totalMinimumPayments)} but only{" "}
-            {formatAmount(plan.moneyAfterExpenses)} is left after expenses. Below is what the budget covers,
-            highest interest rate first — the rest goes unpaid. No payoff projection is possible until income
-            rises or expenses fall.
+            Below is what the budget covers, highest interest rate first. The rest goes unpaid. No payoff
+            projection is possible until income rises or expenses fall.
           </span>
         </div>
       )}
@@ -57,8 +55,8 @@ export function PlanSection({ plan, request }: PlanSectionProps) {
           </span>
           <span className="notice-body">
             That surplus is already folded into the amounts below, on the{" "}
-            {request.payoffStrategy.toLowerCase()} order. The dot marks the debt first in line for it —
-            a deadline can outrank it.
+            {request.payoffStrategy.toLowerCase()} order. The dot marks the debt first in line for it. A
+            deadline can outrank it.
           </span>
         </div>
       )}
@@ -71,7 +69,7 @@ export function PlanSection({ plan, request }: PlanSectionProps) {
           </span>
           <span className="notice-body">
             {deadlineCost > 0
-              ? "Front-loading the debts with deadlines diverts money away from the highest interest rate. That is the price of honouring them — dropping a deadline would save this much."
+              ? "Front-loading the debts with deadlines diverts money away from the highest interest rate. Dropping a deadline would save this much."
               : "Honouring the deadlines happens to be cheaper than the unconstrained order."}
           </span>
         </div>
