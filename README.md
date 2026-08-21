@@ -1,6 +1,6 @@
 # DebtOptimizer
 
-Tell it what you owe in plain English. It tells you where your money goes this month.
+Tell it what you owe in your own words. It tells you where your money goes this month.
 
 **[debtoptimizer.onrender.com](https://debtoptimizer.onrender.com)**
 
@@ -86,7 +86,7 @@ POST /api/profiles/{id}/plan   plan from a saved profile
 
 **No integration tests.** All 28 cover the calculation in isolation. Nothing crosses the HTTP or database boundary, which is how an enum serialisation bug reached production once.
 
-**No staging.** Gated on CI, but it goes straight to production.
+**No staging environment.** A green build deploys straight to production. Tests gate it, but nobody looks at it running before users do.
 
 **Free tier database.** It expires. Fine for a demo, not for anything real.
 
